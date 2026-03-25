@@ -168,7 +168,7 @@ router.post("/", async (req, res) => {
     const origin =
       req.headers["x-origin"] || `${req.protocol}://${req.get("host")}`;
 
-    const url = new URL("/HostelManager/tenant-intake", origin);
+    const url = new URL("/mutakegirlshostel/tenant-intake", origin);
     url.searchParams.set("tenant", "true");
     url.searchParams.set("lock", "1");
     url.searchParams.set("inv", token);
@@ -176,6 +176,61 @@ router.post("/", async (req, res) => {
     res.json({ ok: true, token, url: url.toString(), formId: createdForm._id });
   } catch (err) {
     console.error("Create invite failed:", err);
+    res.status(500).json({ ok: false, message: "Failed to create invite" });
+  }
+});
+
+// Create invite for an existing tenant form (edit/share again)
+router.post("/for-form/:formId", async (req, res) => {
+  try {
+    const { formId } = req.params;
+    const existing = await Form.findById(formId).lean();
+    if (!existing) {
+      return res.status(404).json({ ok: false, message: "Form not found" });
+    }
+
+    const token = crypto.randomUUID();
+
+    const prefillBase = {
+      name: existing.name,
+      phoneNo: existing.phoneNo,
+      roomNo: existing.roomNo,
+      bedNo: existing.bedNo,
+      joiningDate: existing.joiningDate,
+      baseRent: existing.baseRent,
+      rentAmount: existing.rentAmount ?? existing.baseRent,
+      depositAmount: existing.depositAmount,
+      category: existing.category,
+      firstRentStatus: existing.firstRentStatus,
+      firstRentMonth: existing.firstRentMonth,
+    };
+
+    const merged = { ...prefillBase, ...(req.body || {}) };
+    const prefill = {};
+    for (const [k, v] of Object.entries(merged)) {
+      if (v === undefined || v === null || v === "") continue;
+      prefill[k] = v;
+    }
+
+    const inv = await Invite.create({
+      token,
+      usedByFormId: existing._id,
+      prefill,
+      usedAt: null,
+      // expiresAt stays null by default (never expires until used)
+    });
+
+    const origin =
+      req.headers["x-origin"] || `${req.protocol}://${req.get("host")}`;
+
+    const url = new URL("/mutakegirlshostel/tenant-intake", origin);
+    url.searchParams.set("tenant", "true");
+    url.searchParams.set("lock", "1");
+    url.searchParams.set("inv", token);
+
+    res.json({ ok: true, token, url: url.toString(), formId: existing._id, inviteId: inv._id });
+  } catch (err) {
+    console.error("Create invite for form failed:", err);
     res.status(500).json({ ok: false, message: "Failed to create invite" });
   }
 });

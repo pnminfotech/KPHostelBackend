@@ -81,7 +81,7 @@ export async function createForm(req, res) {
         {
           token: inviteToken,
           usedAt: null,
-          expiresAt: { $gt: now },
+          $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
         },
         { $set: { usedAt: now } },
         { new: true, session }

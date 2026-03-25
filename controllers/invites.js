@@ -299,7 +299,6 @@ async function assignNextSrNoAndUpdateCounter() {
 exports.createInvite = async (req, res) => {
   try {
     const token = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 3);
 
     const prefill = req.body || {};
 
@@ -404,7 +403,6 @@ exports.createInvite = async (req, res) => {
       },
       usedByFormId: createdForm._id, // ✅ link to draft form id
       usedAt: null,
-      expiresAt,
     });
 
     const origin =

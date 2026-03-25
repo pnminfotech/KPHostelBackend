@@ -46,20 +46,23 @@ const InviteSchema = new mongoose.Schema(
     usedAt: { type: Date, default: null },
     usedByFormId: { type: mongoose.Schema.Types.ObjectId, ref: "Form" },
 
-    // MUST HAVE DEFAULT EXPIRY
+    // No expiry by default (link valid until used)
     expiresAt: {
       type: Date,
-      default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      required: true,
+      default: null,
+      required: false,
     },
   },
   { timestamps: true }
 );
 
-// Auto delete expired, unused invites
+// Auto delete expired, unused invites (only when expiresAt is set)
 InviteSchema.index(
   { expiresAt: 1 },
-  { expireAfterSeconds: 0, partialFilterExpression: { usedAt: null } }
+  {
+    expireAfterSeconds: 0,
+    partialFilterExpression: { usedAt: null, expiresAt: { $type: "date" } },
+  }
 );
 
 module.exports = mongoose.model("Invite", InviteSchema);

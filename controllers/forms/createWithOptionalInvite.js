@@ -167,7 +167,11 @@ const plainSingleUseFlow = async (inviteToken, rest) => {
   const now = new Date();
 
   const invite = await Invite.findOneAndUpdate(
-    { token: inviteToken, usedAt: null, expiresAt: { $gt: now } },
+    {
+      token: inviteToken,
+      usedAt: null,
+      $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+    },
     { $set: { usedAt: now } },
     { new: true }
   );
@@ -238,7 +242,11 @@ async function createWithOptionalInvite(req, res) {
         const now = new Date();
 
         const invite = await Invite.findOneAndUpdate(
-          { token: inviteToken, usedAt: null, expiresAt: { $gt: now } },
+          {
+            token: inviteToken,
+            usedAt: null,
+            $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+          },
           { $set: { usedAt: now } },
           { new: true, session }
         );

@@ -121,7 +121,7 @@ router.post(
         const now = new Date();
         inviteDoc = await Invite.findOne({
           token: inv,
-          expiresAt: { $gt: now },
+          $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
         });
 
         if (!inviteDoc?.usedByFormId) {
@@ -137,7 +137,10 @@ router.post(
       if (inv) {
         if (!inviteDoc) {
           const now = new Date();
-          inviteDoc = await Invite.findOne({ token: inv, expiresAt: { $gt: now } });
+          inviteDoc = await Invite.findOne({
+            token: inv,
+            $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+          });
         }
         const lockedKeys = Object.keys(inviteDoc?.prefill || {});
         lockedKeys.forEach((k) => delete updateData[k]);
