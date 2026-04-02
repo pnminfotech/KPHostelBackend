@@ -17,21 +17,26 @@ const imagekit = new ImageKit({
 });
 
 const upload = multer({ storage: multer.memoryStorage() });
-const TARGET = 10 * 1024; // 10 KB
+const TARGET = 300 * 1024; // 300 KB target for faster uploads
+const MIN_WIDTH = 1200; // keep text readable for IDs
 
-// ✅ helper: compress image under 10KB
-async function compressUnder10KB(buf) {
+// ✅ helper: compress image under TARGET (best effort)
+async function compressUnderTarget(buf, mime) {
   let q = 80,
     w = null;
 
+  const meta = await sharp(buf).metadata();
+  const origW = meta.width || null;
+  const shouldKeepMinWidth = origW && origW >= MIN_WIDTH;
+
   let out = await sharp(buf).webp({ quality: q }).toBuffer();
 
-  while (out.length > TARGET && (q > 30 || w === null || w > 200)) {
+  while (out.length > TARGET && (q > 30 || w === null || w > MIN_WIDTH)) {
     if (q > 30) q -= 10;
     else {
-      const meta = await sharp(buf).metadata();
-      w = w || meta.width || 800;
-      w = Math.max(200, Math.floor(w * 0.8));
+      w = w || origW || 1600;
+      w = Math.floor(w * 0.9);
+      if (shouldKeepMinWidth) w = Math.max(MIN_WIDTH, w);
     }
 
     const p = sharp(buf);
@@ -40,10 +45,10 @@ async function compressUnder10KB(buf) {
   }
 
   if (out.length > TARGET) {
-    out = await sharp(buf)
-      .resize({ width: 200, withoutEnlargement: true })
-      .webp({ quality: 25 })
-      .toBuffer();
+    // final attempt: reduce quality but keep width if possible
+    const p = sharp(buf);
+    if (w) p.resize({ width: w, withoutEnlargement: true });
+    out = await p.webp({ quality: 35 }).toBuffer();
   }
 
   return out;
@@ -152,11 +157,15 @@ firstRentMonth: body.firstRentMonth,
       let contentType = f.mimetype;
       let uploadName = `${Date.now()}_${safeBaseName}`;
 
-      // ✅ If image => compress to webp
+      // ✅ If image => compress to webp (skip if already small)
       if (/^image\//i.test(f.mimetype)) {
-        uploadBuffer = await compressUnder10KB(f.buffer);
-        contentType = "image/webp";
-        uploadName = `${Date.now()}_${safeBaseName}.webp`;
+        const alreadySmall = f.buffer?.length && f.buffer.length <= TARGET;
+        const alreadyWebp = /image\/webp/i.test(f.mimetype);
+        if (!alreadySmall || !alreadyWebp) {
+          uploadBuffer = await compressUnderTarget(f.buffer, f.mimetype);
+          contentType = "image/webp";
+          uploadName = `${Date.now()}_${safeBaseName}.webp`;
+        }
       }
 
       const uploadRes = await imagekit.upload({
