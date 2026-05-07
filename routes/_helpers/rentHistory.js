@@ -90,6 +90,13 @@ function normalizeSnapshot(entry = {}, fallbackDate = null) {
 }
 
 function getCurrentMonthlyRent(tenant = {}, roomsData = []) {
+  if (roomsData && tenant?.roomNo && tenant?.bedNo) {
+    const room = roomsData.find((r) => String(r.roomNo) === String(tenant.roomNo));
+    const bed = room?.beds?.find((b) => String(b.bedNo) === String(tenant.bedNo));
+    const bedRent = toNum(bed?.price) || toNum(bed?.baseRent) || toNum(bed?.monthlyRent);
+    if (bedRent) return bedRent;
+  }
+
   const currentFromTenant =
     toNum(tenant?.baseRent) ||
     toNum(tenant?.rentAmount) ||
@@ -98,12 +105,6 @@ function getCurrentMonthlyRent(tenant = {}, roomsData = []) {
     toNum(tenant?.defaultRent) ||
     toNum(tenant?.monthlyRent);
   if (currentFromTenant) return currentFromTenant;
-
-  if (roomsData && tenant?.roomNo && tenant?.bedNo) {
-    const room = roomsData.find((r) => String(r.roomNo) === String(tenant.roomNo));
-    const bed = room?.beds?.find((b) => String(b.bedNo) === String(tenant.bedNo));
-    return toNum(bed?.price) || toNum(bed?.baseRent) || toNum(bed?.monthlyRent) || 0;
-  }
 
   return 0;
 }
@@ -197,33 +198,6 @@ function buildRentTimeline(tenant = {}, roomsData = []) {
     .sort((a, b) => a.effectiveFrom - b.effectiveFrom)
     .forEach((snap) => snapshots.push(snap));
 
-  const paidAmountCounts = paidRents.reduce((acc, rent) => {
-    acc.set(rent.amount, (acc.get(rent.amount) || 0) + 1);
-    return acc;
-  }, new Map());
-
-  let lastInferredAmount = snapshots.length
-    ? toNum(snapshots[snapshots.length - 1].baseRent || snapshots[snapshots.length - 1].rentAmount)
-    : 0;
-
-  paidRents.forEach((rent) => {
-    if ((paidAmountCounts.get(rent.amount) || 0) < 2) return;
-    if (rent.amount === lastInferredAmount) return;
-
-    const cycleStart = getCycleStartForMonth(tenant, rent.ym.y, rent.ym.m);
-    if (!cycleStart) return;
-
-    snapshots.push({
-      effectiveFrom: cycleStart,
-      roomNo: tenant?.roomNo != null ? String(tenant.roomNo) : "",
-      bedNo: tenant?.bedNo != null ? String(tenant.bedNo) : "",
-      baseRent: rent.amount,
-      rentAmount: rent.amount,
-      source: "payment-inferred",
-    });
-    lastInferredAmount = rent.amount;
-  });
-
   const selectedShiftDate =
     toValidDate(tenant.shiftEffectiveFrom) ||
     toValidDate(tenant.shiftDate) ||
@@ -263,15 +237,15 @@ function buildRentTimeline(tenant = {}, roomsData = []) {
   }
 
   if (!snapshots.length) {
-    if (paidRents.length) {
-      const firstPaid = paidRents[0];
+    const fallback = getCurrentMonthlyRent(tenant, roomsData);
+    if (fallback > 0) {
       snapshots.push({
-        effectiveFrom: toValidDate(tenant.joiningDate) || firstPaid.date,
+        effectiveFrom: toValidDate(tenant.joiningDate) || new Date(),
         roomNo: tenant?.roomNo != null ? String(tenant.roomNo) : "",
         bedNo: tenant?.bedNo != null ? String(tenant.bedNo) : "",
-        baseRent: firstPaid.amount,
-        rentAmount: firstPaid.amount,
-        source: "payment",
+        baseRent: fallback,
+        rentAmount: fallback,
+        source: "current",
       });
     }
   }
