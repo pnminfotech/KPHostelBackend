@@ -10,12 +10,23 @@ const router = express.Router();
 // ✅ Multer memory (not disk)
 const upload = multer({ storage: multer.memoryStorage() });
 
-// ✅ ImageKit init
-const imagekit = new ImageKit({
-  publicKey: process.env.IMAGEKIT_PUBLIC_KEY || "",
-  privateKey: process.env.IMAGEKIT_PRIVATE_KEY || "",
-  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT || "",
-});
+function hasImageKitConfig() {
+  return (
+    !!process.env.IMAGEKIT_PUBLIC_KEY &&
+    !!process.env.IMAGEKIT_PRIVATE_KEY &&
+    !!process.env.IMAGEKIT_URL_ENDPOINT
+  );
+}
+
+function getImageKit() {
+  if (!hasImageKitConfig()) return null;
+
+  return new ImageKit({
+    publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+    privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+    urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
+  });
+}
 
 // compress images under 10KB (same idea as your other route)
 const TARGET = 10 * 1024;
@@ -64,10 +75,7 @@ async function compressUnder10KB(buf) {
 // POST /api/uploads/docs  ✅ ImageKit-only
 router.post("/docs", upload.array("documents", 10), async (req, res) => {
   try {
-    const canUseImagekit =
-      !!process.env.IMAGEKIT_PUBLIC_KEY &&
-      !!process.env.IMAGEKIT_PRIVATE_KEY &&
-      !!process.env.IMAGEKIT_URL_ENDPOINT;
+    const canUseImagekit = hasImageKitConfig();
 
     if (!canUseImagekit) {
       return res.status(500).json({
@@ -75,6 +83,8 @@ router.post("/docs", upload.array("documents", 10), async (req, res) => {
         message: "ImageKit not configured. Cannot upload documents.",
       });
     }
+
+    const imagekit = getImageKit();
 
     const files = req.files || [];
     const invalidFiles = files.filter((file) => !isAllowedImageFile(file));

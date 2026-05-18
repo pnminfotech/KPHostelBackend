@@ -91,6 +91,7 @@ const formSchema = new mongoose.Schema(
     name: { type: String, required: true },
     joiningDate: { type: Date, required: true },
     category: { type: String },
+    roomId: { type: String },
     roomNo: { type: String },
     depositAmount: { type: Number, required: true },
 

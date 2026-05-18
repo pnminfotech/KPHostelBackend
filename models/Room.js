@@ -12,6 +12,11 @@ const BedSchema = new mongoose.Schema(
 
 const RoomSchema = new mongoose.Schema(
   {
+    propertyType: {
+      type: String,
+      enum: ["bed", "room", "shop"],
+      default: "bed",
+    },
     category: { type: String, required: true }, // e.g. Fuge Building, Boys, Girls
     floorNo: { type: String, required: true },  // e.g. Ground, 1, 2nd, Basement
     roomNo: { type: String, required: true },

@@ -191,6 +191,13 @@
 const express = require("express");
 const router = express.Router();
 const Room = require("../models/Room");
+const Form = require("../models/Form");
+
+function normalizePropertyType(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "room" || raw === "shop") return raw;
+  return "bed";
+}
 
 router.get("/", async (req, res) => {
   try {
@@ -204,7 +211,7 @@ router.get("/", async (req, res) => {
 // ✅ Create room: check duplicate only inside same category
 router.post("/", async (req, res) => {
   try {
-    const { category, floorNo, roomNo } = req.body || {};
+    const { category, floorNo, roomNo, propertyType } = req.body || {};
     if (!category || !floorNo || !roomNo) {
       return res.status(400).json({ message: "category, floorNo and roomNo are required" });
     }
@@ -212,6 +219,7 @@ router.post("/", async (req, res) => {
     const cat = String(category).trim();
     const flr = String(floorNo).trim();
     const rno = String(roomNo).trim();
+    const normalizedPropertyType = normalizePropertyType(propertyType);
 
     const existing = await Room.findOne({ category: cat, roomNo: rno });
     // If you chose stricter index: use { category: cat, floorNo: flr, roomNo: rno }
@@ -220,7 +228,24 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Room already exists in this category" });
     }
 
-    const room = await Room.create({ category: cat, floorNo: flr, roomNo: rno, beds: [] });
+    const beds =
+      normalizedPropertyType === "bed"
+        ? []
+        : [
+            {
+              bedNo: normalizedPropertyType === "shop" ? "SHOP-1" : "ROOM-1",
+              bedCategory: "Primary",
+              price: null,
+            },
+          ];
+
+    const room = await Room.create({
+      propertyType: normalizedPropertyType,
+      category: cat,
+      floorNo: flr,
+      roomNo: rno,
+      beds,
+    });
     return res.status(201).json(room);
   } catch (err) {
     // duplicate key error for compound index
@@ -241,6 +266,9 @@ router.post("/:roomId/bed", async (req, res) => {
 
     const room = await Room.findById(roomId);
     if (!room) return res.status(404).json({ message: "Room not found" });
+    if (normalizePropertyType(room.propertyType) !== "bed") {
+      return res.status(400).json({ message: "Additional beds are allowed only for bed-wise properties" });
+    }
 
     const exists = room.beds.some(
       (b) => String(b.bedNo).trim().toLowerCase() === String(bedNo).trim().toLowerCase()
@@ -337,6 +365,14 @@ router.delete("/:roomNo/bed/:bedNo", async (req, res) => {
   const { roomNo, bedNo } = req.params;
 
   try {
+    const room = await Room.findOne({ roomNo: String(roomNo) });
+    if (!room) {
+      return res.status(404).json({ message: "Room not found" });
+    }
+    if (normalizePropertyType(room.propertyType) !== "bed" && (room.beds || []).length <= 1) {
+      return res.status(400).json({ message: "Primary room/shop slot cannot be deleted" });
+    }
+
     const result = await Room.updateOne(
       { roomNo: String(roomNo) },
       {
@@ -353,9 +389,37 @@ router.delete("/:roomNo/bed/:bedNo", async (req, res) => {
     if (result.modifiedCount === 0)
       return res.status(404).json({ message: "Bed not found" });
 
-    const room = await Room.findOne({ roomNo: String(roomNo) });
-    return res.json({ message: "Bed deleted successfully", room });
+    const updatedRoom = await Room.findOne({ roomNo: String(roomNo) });
+    return res.json({ message: "Bed deleted successfully", room: updatedRoom });
   } catch (err) {
+    return res.status(500).json({ message: "Internal server error", error: err.message });
+  }
+});
+
+router.delete("/:roomId", async (req, res) => {
+  const { roomId } = req.params;
+
+  try {
+    const room = await Room.findById(roomId);
+    if (!room) {
+      return res.status(404).json({ message: "Room not found" });
+    }
+
+    const activeTenant = await Form.findOne({
+      roomNo: String(room.roomNo || "").trim(),
+      leaveDate: { $in: [null, ""] },
+    }).lean();
+
+    if (activeTenant) {
+      return res.status(400).json({
+        message: "Cannot delete this room/shop because a tenant is assigned to it",
+      });
+    }
+
+    await Room.findByIdAndDelete(roomId);
+    return res.json({ message: "Room deleted successfully" });
+  } catch (err) {
+    console.error("Delete room error:", err);
     return res.status(500).json({ message: "Internal server error", error: err.message });
   }
 });
@@ -364,16 +428,24 @@ router.delete("/:roomNo/bed/:bedNo", async (req, res) => {
 // ✅ PUT /api/rooms/:roomId  -> update room category (and optionally floorNo/roomNo later)
 router.put("/:roomId", async (req, res) => {
   const { roomId } = req.params;
-  const { category } = req.body || {};
+  const { category, propertyType } = req.body || {};
 
   try {
-    if (!category || !String(category).trim()) {
-      return res.status(400).json({ message: "category is required" });
+    if (!category && propertyType === undefined) {
+      return res.status(400).json({ message: "category or propertyType is required" });
+    }
+
+    const update = {};
+    if (category && String(category).trim()) {
+      update.category = String(category).trim();
+    }
+    if (propertyType !== undefined) {
+      update.propertyType = normalizePropertyType(propertyType);
     }
 
     const updated = await Room.findByIdAndUpdate(
       roomId,
-      { $set: { category: String(category).trim() } },
+      { $set: update },
       { new: true, runValidators: true }
     );
 

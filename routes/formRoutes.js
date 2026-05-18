@@ -110,27 +110,71 @@ function isSameCategory(tenant, category) {
   return !tenantCategory || !category || tenantCategory === category;
 }
 
+function normalizePropertyType(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "room" || raw === "shop") return raw;
+  return "bed";
+}
+
 async function getVacantBeds(excludeTenantId) {
   const [rooms, forms] = await Promise.all([
     Room.find({}).lean(),
     Form.find({}).select("_id roomNo bedNo category leaveDate").lean(),
   ]);
 
-  const occupied = new Set();
+  const roomTypeMap = new Map(
+    rooms.map((room) => [String(room.roomNo || "").trim(), normalizePropertyType(room.propertyType)])
+  );
+
+  const occupiedBeds = new Set();
+  const occupiedRooms = new Set();
   forms.forEach((tenant) => {
     if (excludeTenantId && String(tenant._id) === String(excludeTenantId)) return;
     if (!isActiveTenant(tenant)) return;
+
     const roomNo = String(tenant.roomNo || "").trim();
     const bedNo = String(tenant.bedNo || "").trim();
-    if (roomNo && bedNo) occupied.add(`${roomNo}__${bedNo}`);
+    const propertyType = roomTypeMap.get(roomNo) || "bed";
+
+    if (!roomNo) return;
+
+    if (propertyType === "bed") {
+      if (bedNo) occupiedBeds.add(`${roomNo}__${bedNo}`);
+      return;
+    }
+
+    occupiedRooms.add(roomNo);
   });
 
   const vacantBeds = [];
   rooms.forEach((room) => {
     const roomNo = String(room.roomNo || "").trim();
-    (room.beds || []).forEach((bed) => {
+    const propertyType = normalizePropertyType(room.propertyType);
+    const roomBeds = Array.isArray(room.beds) ? room.beds : [];
+
+    if (!roomNo || !roomBeds.length) return;
+
+    if (propertyType !== "bed") {
+      if (occupiedRooms.has(roomNo)) return;
+
+      const primaryBed = roomBeds[0];
+      const bedNo = String(primaryBed?.bedNo || "").trim();
+      if (!bedNo) return;
+
+      vacantBeds.push({
+        category: room.category || "",
+        floorNo: room.floorNo || "",
+        roomNo,
+        bedNo,
+        bedCategory: primaryBed?.bedCategory || "",
+        price: primaryBed?.price ?? null,
+      });
+      return;
+    }
+
+    roomBeds.forEach((bed) => {
       const bedNo = String(bed.bedNo || "").trim();
-      if (!roomNo || !bedNo || occupied.has(`${roomNo}__${bedNo}`)) return;
+      if (!bedNo || occupiedBeds.has(`${roomNo}__${bedNo}`)) return;
       vacantBeds.push({
         category: room.category || "",
         floorNo: room.floorNo || "",
@@ -159,20 +203,31 @@ router.post("/cancel-leave", async (req, res) => {
     }
 
     const roomNo = String(requestedRoomNo || tenant.roomNo || "").trim();
-    const bedNo = String(requestedBedNo || tenant.bedNo || "").trim();
+    const room = roomNo ? await Room.findOne({ roomNo }).lean() : null;
+    const propertyType = normalizePropertyType(room?.propertyType);
+    const fallbackBedNo = String(room?.beds?.[0]?.bedNo || "").trim();
+    const bedNo = String(requestedBedNo || tenant.bedNo || fallbackBedNo || "").trim();
     const category = String(requestedCategory || tenant.category || "").trim();
 
-    if (!roomNo || !bedNo) {
+    if (!roomNo || (propertyType === "bed" && !bedNo)) {
       const vacantBeds = await getVacantBeds(id);
       return res.status(409).json({
         success: false,
         code: "BED_REQUIRED",
-        message: "Please select a room and bed before undoing leave.",
+        message:
+          propertyType === "shop"
+            ? "Please select a shop before undoing leave."
+            : propertyType === "room"
+            ? "Please select a room before undoing leave."
+            : "Please select a room and bed before undoing leave.",
         vacantBeds,
       });
     }
 
-    const candidates = await Form.find({ roomNo, bedNo, _id: { $ne: id } })
+    const conflictQuery =
+      propertyType === "bed" ? { roomNo, bedNo, _id: { $ne: id } } : { roomNo, _id: { $ne: id } };
+
+    const candidates = await Form.find(conflictQuery)
       .select("_id name roomNo bedNo category leaveDate")
       .lean();
     const activeConflict = candidates.find((candidate) =>
@@ -181,10 +236,16 @@ router.post("/cancel-leave", async (req, res) => {
 
     if (activeConflict) {
       const vacantBeds = await getVacantBeds(id);
+      const conflictLabel =
+        propertyType === "shop"
+          ? `Old shop ${roomNo} is already occupied by ${activeConflict.name || "another tenant"}. Select another vacant shop to undo leave.`
+          : propertyType === "room"
+          ? `Old room ${roomNo} is already occupied by ${activeConflict.name || "another tenant"}. Select another vacant room to undo leave.`
+          : `Old bed Room ${roomNo}, Bed ${bedNo} is already occupied by ${activeConflict.name || "another tenant"}. Select another vacant bed to undo leave.`;
       return res.status(409).json({
         success: false,
         code: "BED_OCCUPIED",
-        message: `Old bed Room ${roomNo}, Bed ${bedNo} is already occupied by ${activeConflict.name || "another tenant"}. Select another vacant bed to undo leave.`,
+        message: conflictLabel,
         occupant: {
           id: activeConflict._id,
           name: activeConflict.name || "",

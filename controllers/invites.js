@@ -14,7 +14,7 @@
 // //   const origin =
 // //     req.get("X-Origin") ||
 // //     req.get("Origin") ||
-// //     "   http://localhost:8000";
+// //     "   https://mutakegirlshostel-0ko7.onrender.com";
 
 // //   const url = new URL("/sismarketing/tenant-intake", origin);
 
@@ -181,7 +181,7 @@
 //     const origin =
 //       req.get("X-Origin") ||
 //       req.get("Origin") ||
-//       "   http://localhost:8000";
+//       "   https://mutakegirlshostel-0ko7.onrender.com";
 
 //     // ✅ make sure this path matches your React route
 //     const url = new URL("/sismarketing/tenant-intake", origin);
@@ -477,7 +477,7 @@ exports.createInvite = async (req, res) => {
     const origin =
       req.get("X-Origin") ||
       req.get("Origin") ||
-      "   http://localhost:8000";
+      "   https://mutakegirlshostel-0ko7.onrender.com";
 
     const url = new URL("/mutakegirlshostel/tenant-intake", origin);
     url.searchParams.set("tenant", "true");

@@ -10,16 +10,23 @@ const Invite = require("../models/Invite");
 const router = express.Router();
 
 /* ================== ImageKit ================== */
-const imagekit = new ImageKit({
-  publicKey: process.env.IMAGEKIT_PUBLIC_KEY || "",
-  privateKey: process.env.IMAGEKIT_PRIVATE_KEY || "",
-  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT || "",
-});
+function hasImageKitConfig() {
+  return (
+    !!process.env.IMAGEKIT_PUBLIC_KEY &&
+    !!process.env.IMAGEKIT_PRIVATE_KEY &&
+    !!process.env.IMAGEKIT_URL_ENDPOINT
+  );
+}
 
-const canUseImagekit =
-  !!process.env.IMAGEKIT_PUBLIC_KEY &&
-  !!process.env.IMAGEKIT_PRIVATE_KEY &&
-  !!process.env.IMAGEKIT_URL_ENDPOINT;
+function getImageKit() {
+  if (!hasImageKitConfig()) return null;
+
+  return new ImageKit({
+    publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+    privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+    urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
+  });
+}
 
 /* ================== Multer (memory) ================== */
 const upload = multer({ storage: multer.memoryStorage() });
@@ -125,6 +132,8 @@ router.post(
   async (req, res) => {
     try {
       console.log("REQ BODY:", req.body);
+      const canUseImagekit = hasImageKitConfig();
+      const imagekit = canUseImagekit ? getImageKit() : null;
 
       let { formId, inv } = req.body;
 

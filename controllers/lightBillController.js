@@ -55,6 +55,7 @@ exports.createLightBill = async (req, res) => {
 
     const filter = {
       name,
+      roomNo: roomNo || "",
       date: { $gte: startOfMonth, $lt: endOfMonth }
     };
 

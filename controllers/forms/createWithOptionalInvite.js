@@ -194,13 +194,15 @@ function isActiveBedTenant(tenant, category) {
 }
 
 async function assertBedIsVacant(rest, excludeTenantId) {
+  const roomId = String(rest?.roomId || "").trim();
   const roomNo = String(rest?.roomNo || "").trim();
   const bedNo = String(rest?.bedNo || "").trim();
-  if (!roomNo || !bedNo) return;
+  if ((!roomId && !roomNo) || !bedNo) return;
 
   const category = String(rest?.category || "").trim();
+  const roomFilter = roomId ? { roomId } : { roomNo };
   const candidates = await Form.find({
-    roomNo,
+    ...roomFilter,
     bedNo,
     ...(excludeTenantId ? { _id: { $ne: excludeTenantId } } : {}),
   })
@@ -210,7 +212,7 @@ async function assertBedIsVacant(rest, excludeTenantId) {
 
   if (occupied) {
     const e = new Error(
-      `Bed already occupied by "${occupied.name || "tenant"}": Room "${roomNo}", Bed "${bedNo}".`
+      `Bed already occupied by "${occupied.name || "tenant"}": Room "${roomNo || roomId}", Bed "${bedNo}".`
     );
     e.http = 409;
     throw e;

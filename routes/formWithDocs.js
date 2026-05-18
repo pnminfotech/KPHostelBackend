@@ -15,12 +15,23 @@ const {
 
 const ImageKit = require("imagekit");
 
-// ✅ ImageKit init
-const imagekit = new ImageKit({
-  publicKey: process.env.IMAGEKIT_PUBLIC_KEY || "",
-  privateKey: process.env.IMAGEKIT_PRIVATE_KEY || "",
-  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT || "",
-});
+function hasImageKitConfig() {
+  return (
+    !!process.env.IMAGEKIT_PUBLIC_KEY &&
+    !!process.env.IMAGEKIT_PRIVATE_KEY &&
+    !!process.env.IMAGEKIT_URL_ENDPOINT
+  );
+}
+
+function getImageKit() {
+  if (!hasImageKitConfig()) return null;
+
+  return new ImageKit({
+    publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+    privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+    urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
+  });
+}
 
 const upload = multer({ storage: multer.memoryStorage() });
 const TARGET = 300 * 1024; // 300 KB target for faster uploads
@@ -139,10 +150,7 @@ const firstRentStatus = String(body.firstRentStatus || "NOT_PAID").trim();
 const firstRentMonth = String(body.firstRentMonth || rentMonth).trim();
 
     // ✅ ImageKit STRICT (ImageKit-only)
-    const canUseImagekit =
-      !!process.env.IMAGEKIT_PUBLIC_KEY &&
-      !!process.env.IMAGEKIT_PRIVATE_KEY &&
-      !!process.env.IMAGEKIT_URL_ENDPOINT;
+    const canUseImagekit = hasImageKitConfig();
 
     if (!canUseImagekit) {
       return res.status(500).json({
@@ -151,9 +159,12 @@ const firstRentMonth = String(body.firstRentMonth || rentMonth).trim();
       });
     }
 
+    const imagekit = getImageKit();
+
     const formPayload = {
       name: body.name,
       joiningDate,
+      roomId: body.roomId ? String(body.roomId).trim() : undefined,
       roomNo: body.roomNo,
       depositAmount: toNum(body.depositAmount),
       address: body.address,
@@ -185,11 +196,13 @@ firstRentMonth: body.firstRentMonth,
     };
     const currentRentAmount = getCurrentMonthlyRent(formPayload);
 
+    const selectedRoomId = String(formPayload.roomId || "").trim();
     const selectedRoomNo = String(formPayload.roomNo || "").trim();
     const selectedBedNo = String(formPayload.bedNo || "").trim();
-    if (selectedRoomNo && selectedBedNo) {
+    if ((selectedRoomId || selectedRoomNo) && selectedBedNo) {
+      const roomFilter = selectedRoomId ? { roomId: selectedRoomId } : { roomNo: selectedRoomNo };
       const bedCandidates = await Form.find({
-        roomNo: selectedRoomNo,
+        ...roomFilter,
         bedNo: selectedBedNo,
         ...(formId ? { _id: { $ne: formId } } : {}),
       })
@@ -202,7 +215,7 @@ firstRentMonth: body.firstRentMonth,
       if (occupied) {
         return res.status(409).json({
           ok: false,
-          message: `Bed already occupied: Room "${selectedRoomNo}", Bed "${selectedBedNo}".`,
+          message: `Bed already occupied: Room "${selectedRoomNo || selectedRoomId}", Bed "${selectedBedNo}".`,
         });
       }
     }
