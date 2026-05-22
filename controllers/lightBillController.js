@@ -39,6 +39,7 @@ exports.createLightBill = async (req, res) => {
     const {
       name,
       type,
+      propertyType,
       roomNo,
       meterNo,
       totalReading,
@@ -55,6 +56,7 @@ exports.createLightBill = async (req, res) => {
 
     const filter = {
       name,
+      propertyType: propertyType || "bed",
       roomNo: roomNo || "",
       date: { $gte: startOfMonth, $lt: endOfMonth }
     };
@@ -62,6 +64,7 @@ exports.createLightBill = async (req, res) => {
     const update = {
       name,
       type,
+      propertyType: propertyType || "bed",
       roomNo,
       meterNo,
       totalReading,

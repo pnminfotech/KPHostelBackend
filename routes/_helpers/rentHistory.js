@@ -390,7 +390,11 @@ function appendRentHistorySnapshot(existing = {}, incoming = {}) {
   if (!hasShiftLikeChange) return {};
 
   const mergedTenant = { ...existing, ...incoming };
-  const amount = toNum(incoming.baseRent) || getCurrentMonthlyRent(mergedTenant);
+  const amount =
+    toNum(incoming.baseRent) ||
+    toNum(incoming.rentAmount) ||
+    getCurrentMonthlyRent(mergedTenant) ||
+    getLatestPaidRentAmount(existing);
   if (!amount) return {};
 
   const history = Array.isArray(existing.rentHistory) ? [...existing.rentHistory] : [];
@@ -401,7 +405,8 @@ function appendRentHistorySnapshot(existing = {}, incoming = {}) {
     toValidDate(incoming.effectiveFrom) ||
     new Date();
   requestedStart.setHours(0, 0, 0, 0);
-  const previousAmount = getCurrentMonthlyRent(existing);
+  const previousAmount =
+    getCurrentMonthlyRent(existing) || getLatestPaidRentAmount(existing);
 
   if (!history.length && previousAmount > 0) {
     history.push({

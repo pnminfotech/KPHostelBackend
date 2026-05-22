@@ -21,6 +21,11 @@ const mongoose = require("mongoose");
 const LightBillEntrySchema = new mongoose.Schema({
   name: { type: String, required: true }, // e.g., "Meter 101" or "Maushi"
   type: { type: String, enum: ['meter', 'maushi', 'custom'], required: true },
+  propertyType: {
+    type: String,
+    enum: ["bed", "room", "shop"],
+    default: "bed",
+  },
   roomNo: { type: String },
   meterNo: { type: String },
   totalReading: { type: Number },

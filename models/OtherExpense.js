@@ -2,6 +2,11 @@ const mongoose = require('mongoose');
 
 const otherExpenseSchema = new mongoose.Schema({
   roomNo: { type: String, default: "" },
+  propertyType: {
+    type: String,
+    enum: ["bed", "room", "shop"],
+    default: "bed",
+  },
     mainAmount: {
     type: Number,
     required: true,
