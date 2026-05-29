@@ -14,7 +14,7 @@
 // //   const origin =
 // //     req.get("X-Origin") ||
 // //     req.get("Origin") ||
-// //     "  http://localhost:8000";
+// //     "  https://hosteldemo-api.pnminfotech.com/";
 
 // //   const url = new URL("/sismarketing/tenant-intake", origin);
 
@@ -181,7 +181,7 @@
 //     const origin =
 //       req.get("X-Origin") ||
 //       req.get("Origin") ||
-//       "  http://localhost:8000";
+//       "  https://hosteldemo-api.pnminfotech.com/";
 
 //     // ✅ make sure this path matches your React route
 //     const url = new URL("/sismarketing/tenant-intake", origin);
@@ -265,6 +265,22 @@ const MONTHS = [
   "Jan","Feb","Mar","Apr","May","Jun",
   "Jul","Aug","Sep","Oct","Nov","Dec",
 ];
+function getTenantIntakePath() {
+  const rawBase = String(
+    process.env.PUBLIC_URL ||
+    process.env.FRONTEND_BASENAME ||
+    process.env.APP_BASENAME ||
+    "/hosteldemo"
+  ).trim();
+
+  const basePath =
+    rawBase && rawBase !== "/"
+      ? `/${rawBase.replace(/^\/+|\/+$/g, "")}`
+      : "";
+
+  return `${basePath}/tenant-intake`;
+}
+
 function fmtMonthKey(y, m) {
   const d = new Date(y, m, 1);
   if (isNaN(d)) return undefined;
@@ -477,9 +493,9 @@ exports.createInvite = async (req, res) => {
     const origin =
       req.get("X-Origin") ||
       req.get("Origin") ||
-      "  http://localhost:8000";
+      "  https://hosteldemo-api.pnminfotech.com/";
 
-    const url = new URL("/tenant-intake", origin);
+    const url = new URL(getTenantIntakePath(), origin);
     url.searchParams.set("tenant", "true");
     url.searchParams.set("lock", "1");
     url.searchParams.set("inv", token);
