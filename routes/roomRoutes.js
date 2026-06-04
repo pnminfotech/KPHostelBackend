@@ -211,7 +211,15 @@ router.get("/", async (req, res) => {
 // ✅ Create room: check duplicate only inside same category
 router.post("/", async (req, res) => {
   try {
-    const { category, floorNo, roomNo, propertyType } = req.body || {};
+    const {
+      category,
+      floorNo,
+      roomNo,
+      propertyType,
+      hasWing,
+      wingName,
+      flatType,
+    } = req.body || {};
     if (!category || !floorNo || !roomNo) {
       return res.status(400).json({ message: "category, floorNo and roomNo are required" });
     }
@@ -220,12 +228,29 @@ router.post("/", async (req, res) => {
     const flr = String(floorNo).trim();
     const rno = String(roomNo).trim();
     const normalizedPropertyType = normalizePropertyType(propertyType);
+    const normalizedHasWing = Boolean(hasWing);
+    const normalizedWingName = normalizedHasWing ? String(wingName || "").trim() : "";
+    const normalizedFlatType =
+      normalizedPropertyType === "room" ? String(flatType || "").trim() : "";
 
-    const existing = await Room.findOne({ category: cat, roomNo: rno });
-    // If you chose stricter index: use { category: cat, floorNo: flr, roomNo: rno }
+    if ((normalizedPropertyType === "room" || normalizedPropertyType === "shop") && normalizedHasWing && !normalizedWingName) {
+      return res.status(400).json({ message: "wingName is required when hasWing is enabled" });
+    }
+
+    if (normalizedPropertyType === "room" && !normalizedFlatType) {
+      return res.status(400).json({ message: "flatType is required for residential rooms" });
+    }
+
+    const existing = await Room.findOne({
+      propertyType: normalizedPropertyType,
+      category: cat,
+      floorNo: flr,
+      roomNo: rno,
+      wingName: normalizedWingName,
+    });
 
     if (existing) {
-      return res.status(400).json({ message: "Room already exists in this category" });
+      return res.status(400).json({ message: "Unit already exists in this location" });
     }
 
     const beds =
@@ -242,7 +267,10 @@ router.post("/", async (req, res) => {
     const room = await Room.create({
       propertyType: normalizedPropertyType,
       category: cat,
+      hasWing: normalizedHasWing,
+      wingName: normalizedWingName,
       floorNo: flr,
+      flatType: normalizedFlatType,
       roomNo: rno,
       beds,
     });
@@ -250,7 +278,7 @@ router.post("/", async (req, res) => {
   } catch (err) {
     // duplicate key error for compound index
     if (err?.code === 11000) {
-      return res.status(400).json({ message: "Room already exists in this category" });
+      return res.status(400).json({ message: "Unit already exists in this location" });
     }
     return res.status(500).json({ message: "Internal server error" });
   }
@@ -428,11 +456,19 @@ router.delete("/:roomId", async (req, res) => {
 // ✅ PUT /api/rooms/:roomId  -> update room category (and optionally floorNo/roomNo later)
 router.put("/:roomId", async (req, res) => {
   const { roomId } = req.params;
-  const { category, propertyType } = req.body || {};
+  const { category, propertyType, floorNo, roomNo, hasWing, wingName, flatType } = req.body || {};
 
   try {
-    if (!category && propertyType === undefined) {
-      return res.status(400).json({ message: "category or propertyType is required" });
+    if (
+      !category &&
+      propertyType === undefined &&
+      floorNo === undefined &&
+      roomNo === undefined &&
+      hasWing === undefined &&
+      wingName === undefined &&
+      flatType === undefined
+    ) {
+      return res.status(400).json({ message: "At least one room field is required" });
     }
 
     const update = {};
@@ -441,6 +477,24 @@ router.put("/:roomId", async (req, res) => {
     }
     if (propertyType !== undefined) {
       update.propertyType = normalizePropertyType(propertyType);
+    }
+    if (floorNo !== undefined && String(floorNo).trim()) {
+      update.floorNo = String(floorNo).trim();
+    }
+    if (roomNo !== undefined && String(roomNo).trim()) {
+      update.roomNo = String(roomNo).trim();
+    }
+    if (hasWing !== undefined) {
+      update.hasWing = Boolean(hasWing);
+      if (!update.hasWing && wingName === undefined) {
+        update.wingName = "";
+      }
+    }
+    if (wingName !== undefined) {
+      update.wingName = String(wingName || "").trim();
+    }
+    if (flatType !== undefined) {
+      update.flatType = String(flatType || "").trim();
     }
 
     const updated = await Room.findByIdAndUpdate(
