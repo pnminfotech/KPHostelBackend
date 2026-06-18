@@ -25,7 +25,7 @@ function inferTrackerType(source = {}) {
 }
 
 function tenantIntakePath() {
-  return "/mutakegirlshostel/tenant-intake";
+  return "/kpshevkaripg/tenant-intake";
 }
 
 async function assignNextSrNoAndUpdateCounter() {
